@@ -11,9 +11,9 @@
 #endif
 constexpr char WIFI_SSID[]=SKYMIND_WIFI_SSID;
 constexpr char WIFI_PASSWORD[]=SKYMIND_WIFI_PASSWORD;
-// A fallback hotspot starts after 25 seconds without the ZTE network.
+// A fallback hotspot starts after 25 seconds without the configured network.
 // Its unique password is printed in the USB Serial Monitor (115200 baud).
-constexpr char MDNS_NAME[] = "skymind-env";
+constexpr char MDNS_NAME[] = "environmentmonitortesting";
 
 // CLASSIC ESP32-WROOM DevKit only. GPIO numbers, not header positions.
 constexpr int OUTDOOR_RX=16, OUTDOOR_TX=17, OUTDOOR_DIR=25;

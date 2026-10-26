@@ -1,5 +1,5 @@
-#include "../SkyMindEnvironment/RS485Transport.h"
-#include "../SkyMindEnvironment/Protocol.h"
+#include "../EnvironmentMonitorTesting/RS485Transport.h"
+#include "../EnvironmentMonitorTesting/Protocol.h"
 #include <assert.h>
 #include <iostream>
 #include <vector>

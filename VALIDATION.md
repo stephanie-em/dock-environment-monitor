@@ -1,3 +1,15 @@
+# EnvironmentMonitorTesting — 3.0.3-preview.2 cloud validation
+
+The renamed Arduino sketch compiled successfully using Arduino CLI 1.4.1, Espressif core 3.3.8, OneWire 2.3.8 and FQBN `esp32:esp32:esp32` with default partition settings. Default publishing-disabled build: 1,033,428 bytes flash / 50,664 bytes static RAM. Cloud-enabled compile-only build using synthetic, unprovisioned credentials: 1,233,978 bytes flash / 51,644 bytes static RAM; fits the default 1,310,720-byte app partition. Neither build was uploaded.
+
+Protocol, commissioning and transport regressions passed with AddressSanitizer/UndefinedBehaviorSanitizer. All six cloud encoder modes passed with JSON parsing using a diagnostic build retaining the existing GCC 14 misleading-indentation warning. The strict cloud encoder build still fails under `-Werror` at `CloudProtocol.h:54`; no warning fix was included in this change.
+
+Serial logs for Wi-Fi, UTC readiness and HTTPS acceptance/failures are compiled; physical Wi-Fi, website ingestion, serial output timing and sensor behavior have not been verified on a board. No firmware was uploaded and no live telemetry was sent. The separate website contract suite and missing dashboard-preview fixture test were not run.
+
+---
+
+The following describes the earlier preview.1 validation, not a new execution of those checks.
+
 # Corrected firmware software validation — October 26, 2026
 
 PASS: Arduino IDE bundled arduino-cli 1.4.1 compiled for esp32:esp32:esp32 using installed Espressif core 3.3.8 and OneWire 2.3.8, with default partition scheme. Publishing-disabled build: 1,032,800 bytes flash / 50,664 bytes static RAM before final counter-type guard; full enabled build with synthetic, unprovisioned test credentials after final guard: 1,233,014 bytes flash / 51,644 bytes static RAM. The complete enabled network/TLS/NVS code was linked and fits the 1,310,720-byte app partition. Synthetic private configuration was removed before packaging. No binaries are distributed.

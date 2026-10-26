@@ -24,7 +24,7 @@ portMUX_TYPE stateMux=portMUX_INITIALIZER_UNLOCKED;
 QueueHandle_t pending=nullptr;
 char bootId[37]={};
 uint64_t bootNumber=0,sequence=0,lastPublication=0,lastCaptureEpoch=0,lastNtpStart=0;
-bool wasConnected=false;
+bool wasConnected=false,clockReadyLogged=false;
 String caPem;
 Shared readState(){portENTER_CRITICAL(&stateMux);Shared copy=state;portEXIT_CRITICAL(&stateMux);return copy;}
 int64_t epochMs(){struct timeval tv;gettimeofday(&tv,nullptr);return int64_t(tv.tv_sec)*1000+tv.tv_usec/1000;}
@@ -37,6 +37,7 @@ void onTimeSync(struct timeval* tv) {
 }
 void beginClockSync(uint64_t now) {
   lastNtpStart=now;
+  Serial.println("[cloud] Requesting UTC synchronization; telemetry waits for valid time");
   esp_sntp_set_time_sync_notification_cb(onTimeSync);
   configTime(0,0,CLOUD_NTP_SERVER_1,CLOUD_NTP_SERVER_2,CLOUD_NTP_SERVER_3);
   esp_sntp_set_sync_interval(15*60*1000);
@@ -70,7 +71,7 @@ int publish(const Snapshot& snapshot) {
   else config.crt_bundle_attach=esp_crt_bundle_attach;
 #endif
   esp_http_client_handle_t client=esp_http_client_init(&config);
-  if(!client)return -1;
+  if(!client){Serial.println("[cloud] HTTPS client allocation failed");return -1;}
   String auth=String("Bearer ")+CLOUD_TELEMETRY_TOKEN;
   esp_http_client_set_header(client,"Authorization",auth.c_str());
   esp_http_client_set_header(client,"Content-Type","application/json");
@@ -82,16 +83,22 @@ int publish(const Snapshot& snapshot) {
     if(result==ESP_ERR_HTTP_EAGAIN)vTaskDelay(pdMS_TO_TICKS(10));
   }
   int status=result==ESP_OK?esp_http_client_get_status_code(client):-1;
+  if(result!=ESP_OK)Serial.printf("[cloud] HTTPS request failed: %s; check Wi-Fi/DNS/TLS/UTC or request deadline\n",esp_err_to_name(result));
   esp_http_client_cleanup(client);return status;
 }
 void sender(void*) {
   Snapshot snapshot;unsigned failures=0,conflicts=0;
+  uint64_t lastSuccessLog=0;bool websiteConfirmed=false;
   for(;;) {
     if(xQueueReceive(pending,&snapshot,pdMS_TO_TICKS(250))!=pdTRUE)continue;
     const Shared before=readState();const uint64_t now=telemetryUptimeMs();
     if(before.stopped||WiFi.status()!=WL_CONNECTED||now<before.nextAttempt||!CloudProtocol::pendingFresh(snapshot.capturedUptimeMs,now))continue;
     const int status=publish(snapshot);const uint64_t finished=telemetryUptimeMs();
     if(status>=200&&status<300) {
+      if(!websiteConfirmed||failures||finished-lastSuccessLog>=60000) {
+        Serial.printf("[cloud] Website accepted telemetry: HTTP %d (HTTPS verified)\n",status);
+        lastSuccessLog=finished;websiteConfirmed=true;
+      }
       failures=conflicts=0;
       portENTER_CRITICAL(&stateMux);state.nextAttempt=finished;portEXIT_CRITICAL(&stateMux);
       continue;
@@ -136,7 +143,7 @@ void telemetryTick(CaptureTelemetry capture) {
   if(!pending)return;
   const uint64_t now=telemetryUptimeMs();
   const bool connected=WiFi.status()==WL_CONNECTED;
-  if(!connected){wasConnected=false;xQueueReset(pending);return;}
+  if(!connected){clockReadyLogged=false;wasConnected=false;xQueueReset(pending);return;}
   if(!wasConnected) {
     wasConnected=true;lastPublication=now>=CLOUD_TELEMETRY_INTERVAL_MS?now-CLOUD_TELEMETRY_INTERVAL_MS:0;
     portENTER_CRITICAL(&stateMux);state.nextAttempt=0;portEXIT_CRITICAL(&stateMux);
@@ -148,6 +155,7 @@ void telemetryTick(CaptureTelemetry capture) {
   }
   const int64_t wall=epochMs();
   if(!CloudProtocol::clockUsable(current.synced,now,current.syncAt,wall)) {
+    clockReadyLogged=false;
     if(now-lastNtpStart>=30000)beginClockSync(now);
     return;
   }
@@ -156,6 +164,7 @@ void telemetryTick(CaptureTelemetry capture) {
   if(wall-expected>1000||expected-wall>1000) {
     portENTER_CRITICAL(&stateMux);state.synced=false;state.resync=true;portEXIT_CRITICAL(&stateMux);return;
   }
+  if(!clockReadyLogged){Serial.println("[cloud] UTC synchronized; ready for verified HTTPS telemetry");clockReadyLogged=true;}
   if(uint64_t(wall)<lastCaptureEpoch||now<current.nextAttempt||sequence>CloudProtocol::MAX_INTEGER)return;
   if(lastPublication&&now-lastPublication<CLOUD_TELEMETRY_INTERVAL_MS)return;
   CloudProtocol::Sensor samples[6];bool paused=false;capture(samples,paused,now);

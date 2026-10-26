@@ -1,4 +1,4 @@
-#include "../SkyMindEnvironment/CloudProtocol.h"
+#include "../EnvironmentMonitorTesting/CloudProtocol.h"
 #include <assert.h>
 #include <iostream>
 #include <string>
