@@ -1,0 +1,6 @@
+**/DeviceSecrets.h
+build/
+*.bin
+*.elf
+*.map
+*.log
