@@ -1,4 +1,4 @@
-#include "../SkyMindEnvironment/Protocol.h"
+#include "../EnvironmentMonitorTesting/Protocol.h"
 #include <assert.h>
 #include <iostream>
 #include <vector>

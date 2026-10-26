@@ -8,6 +8,7 @@
 #include <driver/gpio.h>
 #include <errno.h>
 #include "Config.h"
+#include "FirmwareVersion.h"
 #include "Protocol.h"
 #include "RS485Transport.h"
 #include "Commission.h"
@@ -300,18 +301,21 @@ void serviceWifi() {
   bool connected=WiFi.status()==WL_CONNECTED;uint32_t now=millis();
   if(connected&&!wasConnected){
     setWifiPhase(WifiPhase::Connected);
-    Serial.println("Dashboard: http://"+WiFi.localIP().toString());
+    Serial.printf("[wifi] Connected; IP=%s, RSSI=%ld dBm\n",WiFi.localIP().toString().c_str(),(long)WiFi.RSSI());
+    Serial.println("[wifi] Local dashboard: http://"+WiFi.localIP().toString());
     if(!mdnsStarted){mdnsStarted=MDNS.begin(MDNS_NAME);if(mdnsStarted)MDNS.addService("http","tcp",80);}
   }
-  if(!connected&&wasConnected){wifiLostSince=now;WiFi.disconnect(false);setWifiPhase(WifiPhase::Disconnected);}
+  if(!connected&&wasConnected){Serial.println("[wifi] Connection lost; reconnecting");wifiLostSince=now;WiFi.disconnect(false);setWifiPhase(WifiPhase::Disconnected);}
   if(!connected){
     if(wifiPhase==WifiPhase::Connecting){
       wl_status_t status=WiFi.status();
       bool failed=(status==WL_NO_SSID_AVAIL||status==WL_CONNECT_FAILED)&&elapsed(now,wifiPhaseSince,1000);
       if(failed||elapsed(now,wifiPhaseSince,WIFI_ATTEMPT_MS)){
+        Serial.printf("[wifi] Connection attempt failed/timed out; status=%d; retry in %lu ms\n",int(status),(unsigned long)WIFI_RETRY_WAIT_MS);
         WiFi.disconnect(false);setWifiPhase(WifiPhase::Disconnected);
       }
     }else if(elapsed(millis(),wifiPhaseSince,WIFI_RETRY_WAIT_MS)){
+      Serial.println("[wifi] Retrying configured network (2.4 GHz)");
       WiFi.begin(WIFI_SSID,WIFI_PASSWORD);setWifiPhase(WifiPhase::Connecting);
     }
     if(elapsed(now,wifiLostSince,25000))startFallback();
@@ -352,7 +356,7 @@ void captureTelemetry(CloudProtocol::Sensor (&samples)[6],bool& paused,uint64_t 
 }
 String statusJson() {
   uint32_t now=millis();bool connected=WiFi.status()==WL_CONNECTED;
-  String j="{\"firmware\":\"3.0.3-preview.1\",\"revision\":"+String(configRevision)+",\"setupPaused\":"+(setupPaused?"true":"false")+",\"uptime\":"+String(now/1000)+",\"wifi\":"+(connected?"true":"false")+",\"ip\":"+quote(connected?WiFi.localIP().toString():String(""))+
+  String j="{\"firmware\":\"" FIRMWARE_VERSION "\",\"revision\":"+String(configRevision)+",\"setupPaused\":"+(setupPaused?"true":"false")+",\"uptime\":"+String(now/1000)+",\"wifi\":"+(connected?"true":"false")+",\"ip\":"+quote(connected?WiFi.localIP().toString():String(""))+
     ",\"ap\":"+(apStarted?"true":"false")+",\"rssi\":"+String(connected?WiFi.RSSI():0)+",\"sensors\":[";
   for(uint8_t i=0;i<6;i++){
     if(i)j+=',';auto &r=readings[i];bool enabled=i==5||settings.sensors[i].enabled;
@@ -441,7 +445,7 @@ void startServer() {
 void setupApp() {
   Serial.begin(115200);delay(150);
   pinMode(STATUS_LED_PIN,OUTPUT);setWifiPhase(WifiPhase::Disconnected);
-  Serial.println("\nSkyMind environmental monitor 3.0.3-preview.1 — classic ESP32-WROOM");
+  Serial.println("\n" FIRMWARE_NAME " " FIRMWARE_VERSION " — classic ESP32-WROOM");
   defaults();prefsReady=prefs.begin("skymind-env",false);
   if(prefsReady&&prefs.getBytesLength("settings")==sizeof settings){Settings stored={};prefs.getBytes("settings",&stored,sizeof stored);if(validSettings(stored))settings=stored;}
   // Keep the v1 storage layout and preserve already-enabled custom profiles.
@@ -457,10 +461,10 @@ void setupApp() {
   char id[7],secret[17],token[33];snprintf(id,sizeof id,"%06X",uint32_t(ESP.getEfuseMac())&0xffffff);
   snprintf(secret,sizeof secret,"%08lX%08lX",(unsigned long)esp_random(),(unsigned long)esp_random());
   snprintf(token,sizeof token,"%08lX%08lX%08lX%08lX",(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random());
-  csrf=token;apName=String("SkyMind-Env-")+id;apPassword=secret;
+  csrf=token;apName=String("EnvironmentMonitorTesting-")+id;apPassword=secret;
   WiFi.persistent(false);WiFi.mode(WIFI_STA);WiFi.setHostname(MDNS_NAME);WiFi.setSleep(false);WiFi.setAutoReconnect(false);WiFi.begin(WIFI_SSID,WIFI_PASSWORD);
   setWifiPhase(WifiPhase::Connecting);
-  Serial.println("Connecting to configured ZTE Wi-Fi (2.4 GHz)...");wifiLostSince=millis();
+  Serial.println("[wifi] Connecting to configured network (2.4 GHz)...");wifiLostSince=millis();
   startServer();
   telemetryBegin();
 }

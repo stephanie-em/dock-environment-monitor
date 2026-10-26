@@ -1,4 +1,5 @@
 #pragma once
+#include "FirmwareVersion.h"
 // Portable wire-format/policy code shared by the firmware and host contract tests.
 #include <stdint.h>
 #include <stddef.h>
@@ -10,7 +11,7 @@ namespace CloudProtocol {
 constexpr uint64_t MAX_INTEGER=9007199254740991ULL;
 constexpr uint64_t STALE_MS=10000, CLOCK_ERROR_MS=2000;
 constexpr uint64_t SYNC_MAX_AGE_MS=1800000, PENDING_MAX_AGE_MS=500, REQUEST_DEADLINE_MS=3500;
-constexpr const char* FIRMWARE="3.0.3-preview.1";
+constexpr const char* FIRMWARE=FIRMWARE_VERSION;
 struct Sensor { double value=0; bool valid=false, ever=false; uint64_t ageMs=0; };
 struct Meta {
   const char* deviceId; const char* bootId;
